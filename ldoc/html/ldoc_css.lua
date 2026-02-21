@@ -7,7 +7,7 @@ body {
     background-color: #ffffff; margin: 0px;
 }
 
-code, tt { font-family: monospace; font-size: 1.1em; }
+code, tt { font-family: "Courier New"; font-size: 1.1em; }
 span.parameter { font-family:monospace; }
 span.parameter:after { content:":"; }
 span.types:before { content:"("; }
@@ -56,7 +56,7 @@ pre {
     padding: 10px;
     margin: 10px 0 10px 0;
     overflow: auto;
-    font-family: "Andale Mono", monospace;
+    font-family: "Courier New";
 }
 
 pre.example {
