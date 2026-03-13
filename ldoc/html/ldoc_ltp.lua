@@ -12,6 +12,64 @@ return [==[
 # if ldoc.favicon then
     <link rel="icon" href="$(ldoc.favicon)" type="image/png" />
 # end
+    <style type="text/css">
+        #ldoc-search {
+            position: relative;
+            margin: 8px 0 14px 0;
+        }
+        #ldoc-search-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        #ldoc-search-results {
+            display: none;
+            position: absolute;
+            top: 34px;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            max-height: 360px;
+            overflow: auto;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+        .ldoc-search-item {
+            display: block;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            color: inherit;
+            text-decoration: none;
+        }
+        .ldoc-search-item:hover {
+            background: #f7f7f7;
+        }
+        .ldoc-search-item:last-child {
+            border-bottom: none;
+        }
+        .ldoc-search-title {
+            display: block;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .ldoc-search-meta {
+            display: block;
+            margin-top: 2px;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #666;
+        }
+        .ldoc-search-empty {
+            padding: 10px;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
 </head>
 <body>
 
@@ -32,12 +90,18 @@ return [==[
 # local iter = ldoc.modules.iter
 # local function M(txt,item) return ldoc.markup(txt,item,ldoc.plain) end
 # local nowrap = ldoc.wrap and '' or ' nowrap'
+# local asset_prefix = (module and not ldoc.root) and '../' or ''
 
 <!-- Menu -->
 
 <div id="navigation">
 <br/>
 <h1>$(ldoc.project)</h1>
+
+<div id="ldoc-search">
+    <input id="ldoc-search-input" type="text" placeholder="Search symbols (functions, constants)..." autocomplete="off" />
+    <div id="ldoc-search-results"></div>
+</div>
 
 # if ldoc.icon_basename then
 #   if module then
@@ -326,6 +390,8 @@ return [==[
 # end
 </div> <!-- id="about" -->
 </div> <!-- id="container" -->
+<script type="text/javascript" src="$(asset_prefix)ldoc_search_data.js"></script>
+<script type="text/javascript" src="$(asset_prefix)ldoc_search.js"></script>
 </body>
 </html>
 ]==]

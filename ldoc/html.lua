@@ -56,9 +56,259 @@ end
 
 local escape_table = { ["'"] = "&apos;", ["\""] = "&quot;", ["<"] = "&lt;", [">"] = "&gt;", ["&"] = "&amp;" }
 
+local html_entities = {
+    ['&amp;'] = '&',
+    ['&lt;'] = '<',
+    ['&gt;'] = '>',
+    ['&quot;'] = '"',
+    ['&apos;'] = "'",
+    ['&#39;'] = "'",
+    ['&#34;'] = '"',
+    ['&#160;'] = ' ',
+    ['&nbsp;'] = ' ',
+}
+
+local search_script = [==[
+(function () {
+   function getBasePath() {
+      var scripts = document.getElementsByTagName('script');
+      for (var i = 0; i < scripts.length; i++) {
+         var src = scripts[i].getAttribute('src') || '';
+         if (src.indexOf('ldoc_search.js') >= 0) {
+            return src.replace(/ldoc_search\.js(?:\?.*)?$/, '');
+         }
+      }
+      return '';
+   }
+
+   function escapeHtml(text) {
+      return String(text || '')
+         .replace(/&/g, '&amp;')
+         .replace(/</g, '&lt;')
+         .replace(/>/g, '&gt;')
+         .replace(/"/g, '&quot;')
+         .replace(/'/g, '&#39;');
+   }
+
+   function normalize(text) {
+      return String(text || '').toLowerCase();
+   }
+
+   function score(entry, terms) {
+      var symbol = normalize(entry.symbol || entry.title);
+      var title = normalize(entry.title);
+      var module = normalize(entry.module);
+      var kind = normalize(entry.kind);
+      var summary = normalize(entry.summary);
+      var total = 0;
+
+      for (var i = 0; i < terms.length; i++) {
+         var term = terms[i];
+         var inSymbol = symbol.indexOf(term) >= 0;
+         var inTitle = title.indexOf(term) >= 0;
+         var inContext = module.indexOf(term) >= 0 || kind.indexOf(term) >= 0 || summary.indexOf(term) >= 0;
+
+         if (!inSymbol && !inTitle && !inContext) {
+            return -1;
+         }
+
+         if (symbol === term) {
+            total += 300;
+         } else if (symbol.indexOf(term) === 0) {
+            total += 160;
+         } else if (inSymbol) {
+            total += 80;
+         }
+
+         if (inTitle) {
+            total += 45;
+         }
+
+         if (inContext) {
+            total += 12;
+         }
+      }
+
+      return total;
+   }
+
+   function renderResults(items, resultsNode) {
+      if (!items.length) {
+         resultsNode.innerHTML = '<div class="ldoc-search-empty">No results</div>';
+         resultsNode.style.display = 'block';
+         return;
+      }
+
+      var rows = [];
+      for (var i = 0; i < items.length; i++) {
+         var row = items[i];
+         var meta = [];
+         if (row.module) {
+            meta.push(row.module);
+         }
+         if (row.kind) {
+            meta.push(row.kind);
+         }
+
+         rows.push(
+            '<a class="ldoc-search-item" href="' + escapeHtml(resolveUrl(row.url)) + '">' +
+               '<span class="ldoc-search-title">' + escapeHtml(row.title || row.symbol || '') + '</span>' +
+               '<span class="ldoc-search-meta">' + escapeHtml(meta.join(' | ')) + '</span>' +
+            '</a>'
+         );
+      }
+
+      resultsNode.innerHTML = rows.join('');
+      resultsNode.style.display = 'block';
+   }
+
+   function hideResults(resultsNode) {
+      resultsNode.style.display = 'none';
+      resultsNode.innerHTML = '';
+   }
+
+   var basePath = '';
+
+   function resolveUrl(url) {
+      var value = String(url || '');
+      if (/^(?:[a-z]+:|\/|#)/i.test(value)) {
+         return value;
+      }
+      return basePath + value;
+   }
+
+   function initSearch() {
+      var input = document.getElementById('ldoc-search-input');
+      var results = document.getElementById('ldoc-search-results');
+      var data = window.ldocSearchData || [];
+      basePath = getBasePath();
+
+      if (!input || !results || !Array.isArray(data)) {
+         return;
+      }
+
+      input.addEventListener('input', function () {
+         var query = normalize(input.value).trim();
+         if (query.length < 1) {
+            hideResults(results);
+            return;
+         }
+
+         var terms = query.split(/\s+/).filter(Boolean);
+         var matches = [];
+         for (var i = 0; i < data.length; i++) {
+            var entry = data[i];
+            var rank = score(entry, terms);
+            if (rank >= 0) {
+               matches.push({
+                  rank: rank,
+                  symbol: entry.symbol,
+                  title: entry.title,
+                  module: entry.module,
+                  kind: entry.kind,
+                  url: entry.url,
+               });
+            }
+         }
+
+         matches.sort(function (a, b) {
+            if (b.rank !== a.rank) {
+               return b.rank - a.rank;
+            }
+            return String(a.title || '').localeCompare(String(b.title || ''));
+         });
+
+         renderResults(matches.slice(0, 40), results);
+      });
+
+      document.addEventListener('click', function (ev) {
+         if (!results.contains(ev.target) && ev.target !== input) {
+            hideResults(results);
+         }
+      });
+   }
+
+   if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSearch);
+   } else {
+      initSearch();
+   }
+}());
+]==]
+
+local function strip_html(text)
+    text = text or ''
+    text = text:gsub('<script[^>]*>[%s%S]-</script>', ' ')
+    text = text:gsub('<style[^>]*>[%s%S]-</style>', ' ')
+    text = text:gsub('<[^>]+>', ' ')
+    text = text:gsub('&[%w#]+;', html_entities)
+    text = text:gsub('%s+', ' ')
+    text = text:gsub('^%s+', '')
+    text = text:gsub('%s+$', '')
+    return text
+end
+
+local function json_escape(text)
+    text = text or ''
+    text = text:gsub('\\', '\\\\')
+    text = text:gsub('"', '\\"')
+    text = text:gsub('\n', '\\n')
+    text = text:gsub('\r', '\\r')
+    text = text:gsub('\t', '\\t')
+    return text
+end
+
+local function search_data_as_js(entries)
+    local rows = {'window.ldocSearchData = ['}
+
+    for i, entry in ipairs(entries) do
+       local line = ('  {"symbol":"%s","title":"%s","url":"%s","module":"%s","kind":"%s","summary":"%s"}%s'):format(
+          json_escape(entry.symbol),
+             json_escape(entry.title),
+             json_escape(entry.url),
+          json_escape(entry.module),
+          json_escape(entry.kind),
+          json_escape(entry.summary),
+             i < #entries and ',' or ''
+         )
+         rows[#rows + 1] = line
+    end
+
+    rows[#rows + 1] = '];'
+
+    return table.concat(rows, '\n') .. '\n'
+end
+
 function html.generate_output(ldoc, args, project)
    local check_directory, check_file, writefile = tools.check_directory, tools.check_file, tools.writefile
    local original_ldoc
+   local search_entries = {}
+   local seen_search_urls = {}
+
+   local function add_search_entry(symbol, title, rel_path, module_name, kind_name, summary)
+      if not symbol or symbol == '' or not rel_path or rel_path == '' then
+         return
+      end
+
+      if seen_search_urls[rel_path] then
+         return
+      end
+      seen_search_urls[rel_path] = true
+
+      summary = strip_html(summary or '')
+      if #summary > 600 then
+         summary = summary:sub(1, 600)
+      end
+
+      search_entries[#search_entries + 1] = {
+         symbol = symbol,
+         title = title,
+         url = rel_path,
+         module = module_name or '',
+         kind = kind_name or '',
+         summary = summary,
+      }
+   end
 
    local function save_and_set_ldoc (set)
       if not set then return end
@@ -385,11 +635,37 @@ function ldoc.source_ref (fun)
          if ldoc.body and m.postprocess then
             ldoc.body = m.postprocess(ldoc.body)
          end
+
+         local module_name = ldoc.module_name(m)
+
          local out = templatize(module_template, ldoc, m)
-         writefile(args.dir..lkind..'/'..m.name..args.ext,out)
+         local rel_path = lkind..'/'..m.name..args.ext
+         writefile(args.dir..rel_path,out)
+
+         for k, items in m.kinds() do
+            for item in items() do
+               local symbol = item.name or ldoc.display_name(item)
+               local anchor = item.name
+               if symbol and symbol ~= '' and anchor and anchor ~= '' then
+                  add_search_entry(
+                     symbol,
+                     ldoc.display_name(item),
+                     rel_path .. '#' .. anchor,
+                     module_name,
+                     k,
+                     ldoc.descript(item)
+                  )
+               end
+            end
+         end
+
          restore_ldoc()
       end
    end
+
+   writefile(args.dir..'ldoc_search_data.js', search_data_as_js(search_entries))
+   writefile(args.dir..'ldoc_search.js', search_script)
+
    if not args.quiet then print('output written to '..tools.abspath(args.dir)) end
 end
 
